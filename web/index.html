@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentBoard — the Agent ID intent board on BNB Chain</title>
+<style>
+  :root { --bg:#0b0e13; --card:#141a22; --line:#232c38; --text:#e8edf3; --muted:#93a1b3;
+          --accent:#f0b90b; --accent-text:#1a1405; --ok:#3fb97f; --bad:#e05d5d; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  h1 { font-size: 26px; margin: 0; }
+  h1 .dot { color: var(--accent); }
+  .tag { color: var(--muted); margin: 6px 0 0; font-size: 14px; }
+  button { background: var(--accent); color: var(--accent-text); border: 0; border-radius: 10px;
+           padding: 10px 16px; font-weight: 600; cursor: pointer; font-size: 14px; }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+          padding: 18px; margin-top: 18px; }
+  .stats { display:flex; gap: 12px; flex-wrap: wrap; }
+  .stat { flex: 1 1 140px; background: var(--card); border: 1px solid var(--line);
+          border-radius: 14px; padding: 14px 18px; margin-top: 18px; }
+  .stat b { font-size: 24px; display:block; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  textarea { width: 100%; min-height: 76px; background: #0d1117; color: var(--text);
+             border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: inherit; }
+  .row { display:flex; gap: 10px; align-items:center; flex-wrap: wrap; margin-top: 12px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .pill { display:inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px;
+          border: 1px solid var(--line); color: var(--muted); }
+  .pill.ok { color: var(--ok); border-color: var(--ok); }
+  .pill.bad { color: var(--bad); border-color: var(--bad); }
+  .intent { border-top: 1px solid var(--line); padding: 14px 0; }
+  .intent:first-child { border-top: 0; }
+  .intent p { margin: 6px 0; white-space: pre-wrap; word-break: break-word; }
+  .addr { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+  #status { min-height: 20px; font-size: 14px; }
+  a { color: var(--accent); }
+  footer { margin-top: 28px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>AgentBoard<span class="dot">.</span></h1>
+      <p class="tag">The intent board where your <b>Agent ID</b> is the key. Post what your agent
+      does or what you need, check in daily, vouch for fellow holders — on BNB Chain.</p>
+    </div>
+    <button id="connectBtn">Connect wallet</button>
+  </header>
+
+  <p id="status" class="muted"></p>
+
+  <div class="stats">
+    <div class="stat"><b id="statHolders">–</b><span>Agent ID holders interacted</span></div>
+    <div class="stat"><b id="statIntents">–</b><span>intents posted</span></div>
+    <div class="stat"><b id="statStreak">–</b><span>your check-in streak</span></div>
+  </div>
+
+  <section class="card">
+    <h2 style="margin-top:0">Your intent</h2>
+    <p class="muted" id="holderNote">Connect a wallet that holds an Agent ID to post, check in and vouch.
+    Reading the board is open to everyone.</p>
+    <textarea id="intentText" maxlength="280"
+      placeholder="e.g. My agent audits Solidity. Looking for: a designer for agent tooling."></textarea>
+    <div class="row">
+      <button id="postBtn" disabled>Post intent</button>
+      <button id="updateBtn" class="secondary" disabled>Update</button>
+      <button id="deactivateBtn" class="secondary" disabled>Take down</button>
+      <span class="muted" id="charCount">0 / 280</span>
+    </div>
+    <div class="row">
+      <button id="checkInBtn" disabled>Check in for today</button>
+      <span class="muted" id="checkInNote"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 style="margin-top:0">Latest intents</h2>
+    <div id="intentList"><p class="muted">Loading…</p></div>
+  </section>
+
+  <footer>
+    <p><b>How it works:</b> every write on this board is gated on-chain by Agent ID ownership —
+    the board contract checks <code>balanceOf(Agent ID, you) &gt; 0</code> before it accepts an
+    intent, a check-in or a vouch. Your Agent ID is your identity here; there are no accounts,
+    no passwords and nothing to look up: holders publish only what they choose to publish.</p>
+    <p><b>Costs &amp; risks:</b> the board is free to use and holds no funds — you only pay the
+    BNB Chain network gas for your own transactions (a fraction of a cent to a few cents).
+    There is no token, no deposit, no promised return of any kind. Intents are public on-chain
+    text; post only what you are comfortable sharing with everyone, forever.</p>
+    <p>Agent ID contract: <span class="addr" id="agentIdAddr"></span><br>
+    AgentBoard contract: <span class="addr" id="boardAddr"></span></p>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<script>
+// ------------------------------------------------------------------
+// Config — set BOARD_ADDRESS after deployment. Chain: BNB Chain (56).
+// For local testing point BOARD_ADDRESS at an anvil deployment and
+// AGENT_ID_ADDRESS at the MockAgentId, and switch CHAIN_ID to 31337.
+// ------------------------------------------------------------------
+const CHAIN_ID = 56;
+const AGENT_ID_ADDRESS = "0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F";
+const BOARD_ADDRESS = "0x66D883a4261192ffBF16860c589351A593A8A747";
+
+const AGENT_ID_ABI = ["function balanceOf(address) view returns (uint256)"];
+const BOARD_ABI = [
+  "function isHolder(address) view returns (bool)",
+  "function uniqueInteractors() view returns (uint256)",
+  "function intentCount() view returns (uint256)",
+  "function getIntent(uint256) view returns (tuple(address author, string text, uint64 createdAt, uint64 updatedAt, bool active, uint32 vouchCount))",
+  "function intentOf(address) view returns (bool found, uint256 intentId, bool active)",
+  "function streakOf(address) view returns (uint32)",
+  "function hasCheckedInToday(address) view returns (bool)",
+  "function hasVouched(uint256, address) view returns (bool)",
+  "function postIntent(string) returns (uint256)",
+  "function updateIntent(string)",
+  "function deactivateIntent()",
+  "function checkIn() returns (uint32)",
+  "function vouch(uint256)"
+];
+
+const $ = (id) => document.getElementById(id);
+$("agentIdAddr").textContent = AGENT_ID_ADDRESS;
+$("boardAddr").textContent = BOARD_ADDRESS;
+
+let provider, signer, account, board, agentId;
+const configured = BOARD_ADDRESS.startsWith("0x");
+
+function setStatus(msg) { $("status").textContent = msg; }
+
+async function readOnlyBoard() {
+  const rpc = new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org");
+  return new ethers.Contract(BOARD_ADDRESS, BOARD_ABI, rpc);
+}
+
+async function refreshStats() {
+  if (!configured) { setStatus("Board contract address is not set yet — deployment pending."); return; }
+  try {
+    const b = signer ? board : await readOnlyBoard();
+    $("statHolders").textContent = (await b.uniqueInteractors()).toString();
+    $("statIntents").textContent = (await b.intentCount()).toString();
+    if (account) $("statStreak").textContent = (await b.streakOf(account)).toString();
+  } catch (e) { /* stats are best-effort */ }
+}
+
+async function refreshIntents() {
+  if (!configured) { $("intentList").innerHTML = '<p class="muted">Deployment pending.</p>'; return; }
+  const b = signer ? board : await readOnlyBoard();
+  const count = Number(await b.intentCount());
+  if (count === 0) { $("intentList").innerHTML = '<p class="muted">No intents yet — be the first holder to post.</p>'; return; }
+  const rows = [];
+  const from = Math.max(0, count - 20);
+  for (let id = count - 1; id >= from; id--) {
+    const it = await b.getIntent(id);
+    if (!it.active) continue;
+    const mine = account && it.author.toLowerCase() === account.toLowerCase();
+    let vouched = false;
+    if (account) vouched = await b.hasVouched(id, account);
+    rows.push(`<div class="intent">
+      <span class="addr">${it.author}</span>
+      <span class="pill">${Number(it.vouchCount)} vouch${Number(it.vouchCount) === 1 ? "" : "es"}</span>
+      ${mine ? '<span class="pill ok">your intent</span>' : ""}
+      <p>${escapeHtml(it.text)}</p>
+      ${account && !mine ? `<button class="secondary" data-vouch="${id}" ${vouched ? "disabled" : ""}>${vouched ? "Vouched" : "Vouch"}</button>` : ""}
+    </div>`);
+  }
+  $("intentList").innerHTML = rows.join("") || '<p class="muted">No active intents.</p>';
+  document.querySelectorAll("[data-vouch]").forEach((btn) =>
+    btn.addEventListener("click", () => vouch(Number(btn.dataset.vouch))));
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function refreshMine() {
+  if (!account) return;
+  const holder = await board.isHolder(account);
+  $("holderNote").innerHTML = holder
+    ? 'This wallet holds an Agent ID <span class="pill ok">verified on-chain</span> — you can post, check in and vouch.'
+    : 'This wallet does <b>not</b> hold an Agent ID <span class="pill bad">not a holder</span> — writes will be rejected by the board contract. Claim an Agent ID in the Binance app (Agentic Wallet) first.';
+  const [found, , active] = await board.intentOf(account);
+  $("postBtn").disabled = !holder || active;
+  $("updateBtn").disabled = !holder || !active;
+  $("deactivateBtn").disabled = !holder || !active;
+  const done = await board.hasCheckedInToday(account);
+  $("checkInBtn").disabled = !holder || done;
+  $("checkInNote").textContent = done ? "Already checked in today — see you tomorrow." : "";
+  if (found && active) {
+    const [, id] = await board.intentOf(account);
+    const it = await board.getIntent(id);
+    if (!$("intentText").value) $("intentText").value = it.text;
+  }
+}
+
+async function connect() {
+  if (!window.ethereum) { setStatus("No wallet found. Open this page in the Binance app or a wallet browser."); return; }
+  provider = new ethers.BrowserProvider(window.ethereum);
+  const net = await provider.getNetwork();
+  if (Number(net.chainId) !== CHAIN_ID) {
+    try {
+      await window.ethereum.request({ method: "wallet_switchEthereumChain",
+        params: [{ chainId: "0x" + CHAIN_ID.toString(16) }] });
+      provider = new ethers.BrowserProvider(window.ethereum);
+    } catch (e) { setStatus("Please switch your wallet to BNB Chain."); return; }
+  }
+  signer = await provider.getSigner();
+  account = await signer.getAddress();
+  board = new ethers.Contract(BOARD_ADDRESS, BOARD_ABI, signer);
+  agentId = new ethers.Contract(AGENT_ID_ADDRESS, AGENT_ID_ABI, signer);
+  $("connectBtn").textContent = account.slice(0, 6) + "…" + account.slice(-4);
+  setStatus("Connected.");
+  await refreshMine(); await refreshStats(); await refreshIntents();
+}
+
+async function runTx(fn, okMsg) {
+  try {
+    setStatus("Confirm the transaction in your wallet…");
+    const tx = await fn();
+    setStatus("Transaction sent, waiting for confirmation…");
+    await tx.wait();
+    setStatus(okMsg);
+    await refreshMine(); await refreshStats(); await refreshIntents();
+  } catch (e) {
+    setStatus("Transaction failed: " + (e.shortMessage || e.message || e));
+  }
+}
+
+async function vouch(id) { await runTx(() => board.vouch(id), "Vouch recorded."); }
+
+$("connectBtn").addEventListener("click", connect);
+$("postBtn").addEventListener("click", () =>
+  runTx(() => board.postIntent($("intentText").value.trim()), "Intent posted."));
+$("updateBtn").addEventListener("click", () =>
+  runTx(() => board.updateIntent($("intentText").value.trim()), "Intent updated."));
+$("deactivateBtn").addEventListener("click", () =>
+  runTx(() => board.deactivateIntent(), "Intent taken down."));
+$("checkInBtn").addEventListener("click", () =>
+  runTx(() => board.checkIn(), "Checked in — streak updated."));
+$("intentText").addEventListener("input", (e) =>
+  $("charCount").textContent = `${new Blob([e.target.value]).size} / 280 bytes`);
+
+refreshStats(); refreshIntents();
+</script>
+</body>
+</html>
