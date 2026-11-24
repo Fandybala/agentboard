@@ -1,0 +1,12 @@
+# secrets — NEVER commit
+deployer/
+.env
+*.env
+key.env
+
+# build artifacts
+cache/
+out/
+broadcast/
+lib/
+PLAN.md
